@@ -165,8 +165,7 @@ static rmw_subscription_t * create_subscription(
   dds_entity_t dds_ppant, dds_entity_t dds_pub,
   const rosidl_message_type_support_t * type_supports,
   const char * topic_name, const rmw_qos_profile_t * qos_policies,
-  const rmw_subscription_options_t * subscription_options,
-  dds_listener_t * listener
+  const rmw_subscription_options_t * subscription_options
 );
 static rmw_ret_t destroy_subscription(rmw_subscription_t * subscription);
 
@@ -305,7 +304,7 @@ struct rmw_context_impl_t
   uint32_t client_service_id;
 
   rmw_context_impl_t()
-    : common(), domain_id(UINT32_MAX), ppant(0), client_service_id(0)
+  : common(), domain_id(UINT32_MAX), ppant(0), client_service_id(0)
   {
     /* destructor relies on these being initialized properly */
     common.thread_is_running.store(false);
@@ -1080,8 +1079,7 @@ rmw_context_impl_t::init(rmw_init_options_t * options, size_t domain_id)
     rosidl_typesupport_cpp::get_message_type_support_handle<ParticipantEntitiesInfo>(),
     "ros_discovery_info",
     &pubsub_qos,
-    &subscription_options,
-    nullptr);
+    &subscription_options);
   if (this->common.sub == nullptr) {
     this->clean_up();
     return RMW_RET_ERROR;
@@ -2528,12 +2526,10 @@ extern "C" rmw_ret_t rmw_destroy_publisher(rmw_node_t * node, rmw_publisher_t * 
 ///////////                                                                   ///////////
 /////////////////////////////////////////////////////////////////////////////////////////
 
-
 static CddsSubscription * create_cdds_subscription(
   dds_entity_t dds_ppant, dds_entity_t dds_sub,
   const rosidl_message_type_support_t * type_supports, const char * topic_name,
-  const rmw_qos_profile_t * qos_policies, bool ignore_local_publications,
-  dds_listener * listener)
+  const rmw_qos_profile_t * qos_policies, bool ignore_local_publications)
 {
   RET_NULL_OR_EMPTYSTR_X(topic_name, return nullptr);
   RET_NULL_X(qos_policies, return nullptr);
@@ -2558,7 +2554,7 @@ static CddsSubscription * create_cdds_subscription(
   if ((qos = create_readwrite_qos(qos_policies, ignore_local_publications)) == nullptr) {
     goto fail_qos;
   }
-  if ((sub->enth = dds_create_reader(dds_sub, topic, qos, listener)) < 0) {
+  if ((sub->enth = dds_create_reader(dds_sub, topic, qos, nullptr)) < 0) {
     RMW_SET_ERROR_MSG("failed to create reader");
     goto fail_reader;
   }
@@ -2613,15 +2609,14 @@ static rmw_subscription_t * create_subscription(
   dds_entity_t dds_ppant, dds_entity_t dds_sub,
   const rosidl_message_type_support_t * type_supports,
   const char * topic_name, const rmw_qos_profile_t * qos_policies,
-  const rmw_subscription_options_t * subscription_options,
-  dds_listener_t * listener)
+  const rmw_subscription_options_t * subscription_options)
 {
   CddsSubscription * sub;
   rmw_subscription_t * rmw_subscription;
   if (
     (sub = create_cdds_subscription(
       dds_ppant, dds_sub, type_supports, topic_name, qos_policies,
-      subscription_options->ignore_local_publications, listener)) == nullptr)
+      subscription_options->ignore_local_publications)) == nullptr)
   {
     return nullptr;
   }
@@ -2699,14 +2694,10 @@ extern "C" rmw_subscription_t * rmw_create_subscription(
     return nullptr;
   }
 
-  dds_listener_t *listener = dds_create_listener(NULL);
-  dds_lset_data_available(listener, [](dds_entity_t rd, void *arg) {
-    (void)rd;
-    (void)arg;
-  });
-  rmw_subscription_t *sub = create_subscription(
-      node->context->impl->ppant, node->context->impl->dds_sub, type_supports,
-      topic_name, qos_policies, subscription_options, listener);
+  rmw_subscription_t * sub = create_subscription(
+    node->context->impl->ppant, node->context->impl->dds_sub,
+    type_supports, topic_name, qos_policies,
+    subscription_options);
   if (sub == nullptr) {
     return nullptr;
   }
@@ -2885,7 +2876,7 @@ static rmw_ret_t rmw_take_int(
           sizeof(info.publication_handle));
         message_info->source_timestamp = info.source_timestamp;
         // TODO(iluetkeb) add received timestamp, when implemented by Cyclone
-        message_info->received_timestamp = info.reception_timestamp;
+        message_info->received_timestamp = 0;
       }
 #if REPORT_LATE_MESSAGES > 0
       dds_time_t tnow = dds_time();
